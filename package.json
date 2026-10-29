@@ -1,0 +1,11 @@
+{
+  "name": "yt-mp3-downloader",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Download YouTube videos as MP3",
+  "main": "downloader.js",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "which": "^4.0.0"
+  }
+}
