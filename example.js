@@ -1,53 +1,39 @@
 import "dotenv/config";
-import { downloadMp3 } from "./downloader.js";
-import { searchYouTube, searchTopUrl } from "./search.js";
-import { getPlaylistTracks } from "./spotify.js";
+import { fetchPlaylistTracks } from "./spotdl-fetch.js";
+import { addToQueue, getByStatus } from "./queue.js";
+import { runSync } from "./sync.js";
 
 const [,, command, ...rest] = process.argv;
 
-if (command === "download") {
-  // node example.js download <youtube-url>
-  const url = rest[0];
-  if (!url) { console.error("Provide a YouTube URL"); process.exit(1); }
-  console.log(`Downloading: ${url}`);
-  downloadMp3(url)
-    .then((p) => console.log(`Saved to: ${p}`))
+if (command === "queue") {
+  // Morning job: fetch playlist and populate the queue
+  // node example.js queue "https://open.spotify.com/playlist/..."
+  const playlistUrl = rest[0];
+  if (!playlistUrl) { console.error("Provide a Spotify playlist URL"); process.exit(1); }
+
+  console.log("Fetching playlist tracks...");
+  fetchPlaylistTracks(playlistUrl)
+    .then((tracks) => {
+      const added = addToQueue(tracks);
+      console.log(`Added ${added} new track(s) to the queue. (${tracks.length - added} already queued)`);
+    })
     .catch((e) => { console.error(e.message); process.exit(1); });
 
-} else if (command === "search") {
-  // node example.js search "Just Dance - Dennis Quin Remix"
-  const query = rest.join(" ");
-  if (!query) { console.error("Provide a search query"); process.exit(1); }
-  searchYouTube(query)
-    .then((results) => results.forEach((r, i) =>
-      console.log(`${i + 1}. [${r.duration}] ${r.title}\n   ${r.url}`)
-    ))
-    .catch((e) => { console.error(e.message); process.exit(1); });
+} else if (command === "sync") {
+  // Night job: download all pending tracks
+  // node example.js sync
+  runSync().catch((e) => { console.error(e.message); process.exit(1); });
 
-} else if (command === "get") {
-  // node example.js get "Just Dance - Dennis Quin Remix"
-  const query = rest.join(" ");
-  if (!query) { console.error("Provide a search query"); process.exit(1); }
-  console.log(`Searching: "${query}"`);
-  searchTopUrl(query)
-    .then((url) => { console.log(`Found: ${url}`); return downloadMp3(url); })
-    .then((p) => console.log(`Saved to: ${p}`))
-    .catch((e) => { console.error(e.message); process.exit(1); });
-
-} else if (command === "playlist") {
-  // node example.js playlist <spotify-playlist-url-or-id>
-  const input = rest[0];
-  if (!input) { console.error("Provide a Spotify playlist URL or ID"); process.exit(1); }
-  getPlaylistTracks(input)
-    .then((tracks) => tracks.forEach((t, i) =>
-      console.log(`${i + 1}. ${t.query}`)
-    ))
-    .catch((e) => { console.error(e.message); process.exit(1); });
+} else if (command === "status") {
+  // Show queue summary
+  const pending = getByStatus("pending");
+  const done = getByStatus("done");
+  const failed = getByStatus("failed");
+  console.log(`Queue status:\n  pending: ${pending.length}\n  done:    ${done.length}\n  failed:  ${failed.length}`);
 
 } else {
   console.log(`Usage:
-  node example.js search "<query>"        — list top 5 YouTube results
-  node example.js download "<url>"        — download by YouTube URL
-  node example.js get "<query>"           — search + download top result
-  node example.js playlist "<spotify>"    — list all tracks in a playlist`);
+  node example.js queue "<spotify-playlist-url>"   — fetch playlist and populate queue
+  node example.js sync                             — download all pending tracks
+  node example.js status                           — show queue summary`);
 }
