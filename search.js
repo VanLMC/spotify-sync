@@ -16,7 +16,7 @@ export async function searchYouTube(query, limit = 5) {
     throw new Error("A search query string is required");
   }
 
-  const fullQuery = `${query} Extended Mix`;
+  const fullQuery = `${query}`;
 
   const args = [
     `ytsearch${limit}:${fullQuery}`,
