@@ -5,18 +5,14 @@ import { readFileSync, unlinkSync, existsSync } from "fs";
 const execFileAsync = promisify(execFile);
 
 /**
- * Uses `spotdl save` to fetch track metadata from a Spotify playlist
- * without downloading any audio.
+ * Uses `spotdl save` to fetch track metadata from a Spotify playlist.
  *
- * Returns an array ready to be passed into addToQueue().
- *
- * @param {string} playlistUrl - Spotify playlist URL
- * @returns {Promise<Array<{ spotify_id, title, artists }>>}
+ * @param {string} playlistUrl
+ * @returns {Promise<{ playlistName: string, tracks: Array<{ spotify_id, title, artists, query }> }>}
  */
 export async function fetchPlaylistTracks(playlistUrl) {
-  const saveFile = "./playlist-save.spotdl";
+  const saveFile = "./playlist.spotdl";
 
-  // clean up any leftover save file
   if (existsSync(saveFile)) unlinkSync(saveFile);
 
   try {
@@ -30,12 +26,21 @@ export async function fetchPlaylistTracks(playlistUrl) {
   }
 
   const raw = JSON.parse(readFileSync(saveFile, "utf-8"));
-  unlinkSync(saveFile); // clean up
+  unlinkSync(saveFile);
 
-  // spotdl save file is an array of song objects
-  return raw.map((song) => ({
-    spotify_id: song.song_id ?? song.url?.split("/track/")[1]?.split("?")[0] ?? song.name,
-    title: song.name,
-    artists: Array.isArray(song.artists) ? song.artists.join("; ") : song.artist ?? "",
-  }));
+  const playlistName = raw[0]?.list_name ?? "playlist";
+
+  const tracks = raw.map((song) => {
+    const artists = Array.isArray(song.artists)
+      ? song.artists.join(", ")
+      : (song.artist ?? "");
+    return {
+      spotify_id: song.song_id ?? song.url?.split("/track/")[1]?.split("?")[0] ?? song.name,
+      title: song.name,
+      artists,
+      query: `${song.name} - ${artists}`,
+    };
+  });
+
+  return { playlistName, tracks };
 }

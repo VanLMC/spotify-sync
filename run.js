@@ -1,8 +1,12 @@
 import "dotenv/config";
-import { execFile } from "child_process";
+import { readdirSync, mkdirSync, existsSync } from "fs";
+import path from "path";
+import { fetchPlaylistTracks } from "./spotdl-fetch.js";
+import { searchTopUrl } from "./search.js";
+import { downloadMp3 } from "./downloader.js";
 import { markDone, markFailed } from "./queue.js";
 
-const OUT_DIR = "./downloads";
+const DELAY_MS = 2000;
 
 const playlistUrl = process.argv[2];
 if (!playlistUrl) {
@@ -10,53 +14,53 @@ if (!playlistUrl) {
   process.exit(1);
 }
 
-console.log(`Syncing playlist: ${playlistUrl}\n`);
+console.log(`Fetching playlist: ${playlistUrl}\n`);
 
-const args = [
-  "download", playlistUrl,
-  "--output", OUT_DIR,
-  "--format", "mp3",
-  "--audio", "youtube", "youtube-music",
-  "--save-errors", "errors.txt",
-  "--log-level", "INFO",
-];
+const { playlistName, tracks } = await fetchPlaylistTracks(playlistUrl);
 
-const child = execFile("spotdl", args);
+// create output folder named after the playlist
+const outDir = path.join("./downloads", sanitizeName(playlistName));
+if (!existsSync(outDir)) {
+  mkdirSync(outDir, { recursive: true });
+  console.log(`Created folder: ${outDir}`);
+} else {
+  console.log(`Using existing folder: ${outDir}`);
+}
 
-child.stdout.on("data", (data) => {
-  const text = data.toString();
-  process.stdout.write(text);
+// get filenames already in the folder (without extension) for dedup check
+const existingFiles = new Set(
+  readdirSync(outDir).map((f) => path.parse(f).name.toLowerCase())
+);
 
-  for (const line of text.split("\n")) {
-    const doneMatch = line.match(/Downloaded\s+"?(.+?)"?\s+by\s+(.+)/i);
-    if (doneMatch) {
-      const [, title, artists] = doneMatch;
-      markDone(slugId(title, artists), title, artists.trim());
-      continue;
-    }
+const pending = tracks.filter((t) => !existingFiles.has(t.title.toLowerCase()));
+const skipped = tracks.length - pending.length;
 
-    const skipMatch = line.match(/Skipping\s+"?(.+?)"?\s+by\s+(.+)/i);
-    if (skipMatch) {
-      const [, title, artists] = skipMatch;
-      markDone(slugId(title, artists), title, artists.trim());
-      continue;
-    }
+console.log(`Found ${tracks.length} tracks — ${pending.length} to download, ${skipped} already exist.\n`);
 
-    const failMatch = line.match(/(?:LookupError|AudioProviderError|Failed).*?(?:song:|for song:)\s*(.+?)\s*-\s*(.+)/i);
-    if (failMatch) {
-      const [, artists, title] = failMatch;
-      markFailed(slugId(title, artists), title.trim(), artists.trim());
-    }
+for (let i = 0; i < pending.length; i++) {
+  const track = pending[i];
+  console.log(`[${i + 1}/${pending.length}] ${track.query}`);
+
+  try {
+    const url = await searchTopUrl(track.query);
+    console.log(`  Found: ${url}`);
+    const file = await downloadMp3(url, outDir);
+    console.log(`  Saved: ${file}`);
+    markDone(track.spotify_id, track.title, track.artists);
+  } catch (err) {
+    console.error(`  Failed: ${err.message}`);
+    markFailed(track.spotify_id, track.title, track.artists);
   }
-});
 
-child.stderr.on("data", (data) => process.stderr.write(data));
+  if (i < pending.length - 1) await sleep(DELAY_MS);
+}
 
-child.on("close", (code) => {
-  console.log(`\nspotdl exited with code ${code}`);
-  if (code !== 0) console.log("Check errors.txt for failed tracks.");
-});
+console.log("\nDone.");
 
-function slugId(title, artists) {
-  return `${title}-${artists}`.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function sanitizeName(name) {
+  return name.replace(/[<>:"/\\|?*]/g, "").trim();
 }

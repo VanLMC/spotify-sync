@@ -7,16 +7,16 @@ const execFileAsync = promisify(execFile);
  * Searches YouTube for a track and returns the top results.
  * Appends "Extended Mix" to every query automatically.
  *
- * @param {string} query      - e.g. "Just Dance - Dennis Quin Remix"
+ * @param {string} query      - e.g. "Just Dance - Dennis Quin"
  * @param {number} [limit=5]  - number of results to return
- * @returns {Promise<Array<{ title: string, url: string, duration: string, channel: string }>>}
+ * @returns {Promise<Array<{ title, url, duration, channel }>>}
  */
 export async function searchYouTube(query, limit = 5) {
   if (!query || typeof query !== "string") {
     throw new Error("A search query string is required");
   }
 
-  const fullQuery = `${query}`;
+  const fullQuery = `${query} Extended Mix`;
 
   const args = [
     `ytsearch${limit}:${fullQuery}`,
@@ -48,10 +48,9 @@ export async function searchYouTube(query, limit = 5) {
 }
 
 /**
- * Convenience: search and return only the top result's URL.
- *
+ * Returns the URL of the top search result.
  * @param {string} query
- * @returns {Promise<string>} YouTube URL of the best match
+ * @returns {Promise<string>}
  */
 export async function searchTopUrl(query) {
   const results = await searchYouTube(query, 1);

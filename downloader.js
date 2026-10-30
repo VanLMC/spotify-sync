@@ -5,19 +5,14 @@ import path from "path";
 
 const execFileAsync = promisify(execFile);
 
-// Clients to try in order — tv_embedded has the broadest access
 const PLAYER_CLIENTS = ["tv_embedded", "web", "ios"];
 
 /**
- * Downloads a YouTube video as the highest quality MP3.
- *
- * Prerequisites:
- *   - yt-dlp installed and on PATH  (https://github.com/yt-dlp/yt-dlp)
- *   - ffmpeg installed and on PATH  (https://ffmpeg.org)
+ * Downloads a YouTube URL as the highest quality MP3.
  *
  * @param {string} url       - YouTube URL
  * @param {string} [outDir]  - Output directory (defaults to ./downloads)
- * @returns {Promise<string>} - Resolves with the path of the saved MP3 file
+ * @returns {Promise<string>} - Resolves with the saved file path
  */
 export async function downloadMp3(url, outDir = "./downloads") {
   if (!url || !isValidYouTubeUrl(url)) {
@@ -48,11 +43,9 @@ export async function downloadMp3(url, outDir = "./downloads") {
 
     try {
       const { stdout } = await execFileAsync("yt-dlp", args);
-      const filePath = stdout.trim().split("\n").pop();
-      return filePath;
+      return stdout.trim().split("\n").pop();
     } catch (err) {
       lastError = err;
-      // only retry if the error looks like a format/access issue
       if (!err.message.includes("format is not available") &&
           !err.message.includes("Only images")) {
         break;
